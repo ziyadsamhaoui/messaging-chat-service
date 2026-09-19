@@ -66,7 +66,7 @@ public class MongoIndexInitializer implements InitializingBean {
     }
 
     private void ensure(String collection, Index index) {
-        mongoTemplate.indexOps(collection).ensureIndex(index);
+        mongoTemplate.indexOps(collection).createIndex(index);
         log.debug("Ensured index {} on collection {}", index.getIndexKeys(), collection);
     }
 }

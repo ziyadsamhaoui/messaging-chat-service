@@ -1,8 +1,9 @@
-HELP.md
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+.env
+/docs/
 
 ### STS ###
 .apt_generated
@@ -18,6 +19,7 @@ target/
 *.iws
 *.iml
 *.ipr
+*.junie
 
 ### NetBeans ###
 /nbproject/private/
@@ -31,3 +33,7 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Local environment overrides ###
+.env.local
+/src/
