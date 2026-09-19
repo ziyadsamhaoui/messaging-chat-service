@@ -1,17 +1,34 @@
 services:
   mongodb:
-    image: 'mongo:latest'
+    image: 'mongo:8'
+    command: ['--replSet', 'rs0', '--bind_ip_all']
     environment:
-      - 'MONGO_INITDB_DATABASE=mydatabase'
-      - 'MONGO_INITDB_ROOT_PASSWORD=secret'
-      - 'MONGO_INITDB_ROOT_USERNAME=root'
+      - 'MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USERNAME}'
+      - 'MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}'
+      - 'MONGO_INITDB_DATABASE=${MONGO_DATABASE}'
     ports:
-      - '27017'
-  postgres:
-    image: 'postgres:latest'
-    environment:
-      - 'POSTGRES_DB=mydatabase'
-      - 'POSTGRES_PASSWORD=secret'
-      - 'POSTGRES_USER=myuser'
-    ports:
-      - '5432'
+      - '27017:27017'
+    volumes:
+      - 'mongodb-data:/data/db'
+    healthcheck:
+      test:
+        - 'CMD-SHELL'
+        - "mongosh --quiet --host localhost:27017 --username root --password secret --authenticationDatabase admin --eval 'db.runCommand({ ping: 1 }).ok' || exit 1"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  mongodb-init:
+    image: 'mongo:8'
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: 'on-failure'
+    entrypoint:
+      - 'bash'
+      - '-c'
+      - "mongosh --quiet --host mongodb:27017 --username root --password secret --authenticationDatabase admin --eval 'try { rs.status() } catch (error) { rs.initiate({ _id: \"rs0\", members: [{ _id: 0, host: \"localhost:27017\" }] }) }'"
+
+volumes:
+  mongodb-data:
