@@ -1,0 +1,17 @@
+spring:
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/messaging_chat_test
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8081/.well-known/jwks.json
+
+badrlink:
+  chat:
+    ensure-indexes: false
+    internal-service-token: test-internal-token
+  user-service:
+    base-url: http://localhost:8082
+    internal-token: test-internal-token
