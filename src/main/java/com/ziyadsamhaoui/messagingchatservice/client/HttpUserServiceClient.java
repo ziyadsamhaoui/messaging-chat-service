@@ -48,8 +48,8 @@ public class HttpUserServiceClient implements UserServiceClient {
     public boolean isBlockedBetween(String firstUserId, String secondUserId) {
         try {
             BlockStatusResponse blockStatus = restClient.get()
-                    .uri(builder -> builder.path(properties.blockStatusPath()).queryParam("userId", firstUserId)
-                            .queryParam("otherUserId", secondUserId).build())
+                    .uri(builder -> builder.path(properties.blockStatusPath()).queryParam("a", firstUserId)
+                            .queryParam("b", secondUserId).build())
                     .retrieve()
                     .onStatus(status -> status.value() == HttpStatus.NOT_FOUND.value(), (request, response) -> {
                     }).body(BlockStatusResponse.class);
