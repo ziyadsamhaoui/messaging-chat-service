@@ -14,10 +14,22 @@ spring:
       resourceserver:
         jwt:
           jwk-set-uri: ${AUTH_JWK_SET_URI:http://localhost:8081/.well-known/jwks.json}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
   lifecycle:
     timeout-per-shutdown-phase: 20s
 
 badrlink:
+  kafka:
+    enabled: ${KAFKA_ENABLED:true}
+    outbox:
+      enabled: ${KAFKA_ENABLED:true}
+      batch-size: ${KAFKA_RELAY_BATCH:100}
+      bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
   chat:
     default-page-size: 30
     max-page-size: 100
@@ -28,10 +40,11 @@ badrlink:
     ensure-indexes: true
     internal-service-token: ${CHAT_INTERNAL_SERVICE_TOKEN}
   user-service:
+    # Contract below must match messaging-user-service's actual endpoints
     base-url: ${USER_SERVICE_BASE_URL:http://localhost:8082}
     profile-path: /internal/users/{userId}
-    block-status-path: /internal/users/block-status
-    internal-token-header: X-BadrLink-Internal-Token
+    block-status-path: /internal/blocks/check
+    internal-token-header: X-Internal-Token
     internal-token: ${USER_SERVICE_INTERNAL_TOKEN}
     connect-timeout: 2s
     read-timeout: 3s
