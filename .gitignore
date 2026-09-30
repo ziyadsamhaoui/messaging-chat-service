@@ -36,4 +36,3 @@ build/
 
 ### Local environment overrides ###
 .env.local
-/src/
