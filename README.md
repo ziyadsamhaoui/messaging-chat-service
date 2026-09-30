@@ -68,9 +68,11 @@ The Chat Service is part of the BadrLink microservices architecture.
                     └─────────────────────┘
 ```
 
-The service validates Auth-issued JWTs using the Auth Service JWKS and communicates with the User Service for user and block information.
+The service validates Auth-issued JWTs using the Auth Service JWKS (planned; HS256 shared-secret mode today — see `docs/INCOHERENCES_AND_RESOLUTIONS.md` INC-02) and communicates with the User Service for profile existence and block checks. Since Sprint 6 it also consumes User's profile and block events into local caches, publishes message/room/invitation events through a transactional outbox, and emits the username from a cache with a JWT-claim fallback instead of a synchronous lookup.
 
 The service is **REST-only** in the current sprint. Real-time WebSocket/STOMP delivery is handled by the Realtime Gateway in a later sprint.
+
+Centralized references: [`/docs/API_ENDPOINTS.md`](../docs/API_ENDPOINTS.md) (all services), [`/docs/EVENTS.md`](../docs/EVENTS.md) (topics and payloads), [`/docs/adr/`](../docs/adr/0000-index.md) (decision records), [`/docs/INCOHERENCES_AND_RESOLUTIONS.md`](../docs/INCOHERENCES_AND_RESOLUTIONS.md) (audit findings).
 
 ---
 
@@ -88,19 +90,19 @@ The service is **REST-only** in the current sprint. Real-time WebSocket/STOMP de
 
 ### Messages
 
-| Method   | Endpoint                   | Description           |
-| -------- | -------------------------- | --------------------- |
-| `POST`   | `/rooms/{roomId}/messages` | Send a message        |
-| `GET`    | `/rooms/{roomId}/messages` | Get message history   |
-| `PATCH`  | `/messages/{messageId}`    | Edit a message        |
-| `DELETE` | `/messages/{messageId}`    | Soft-delete a message |
+| Method   | Endpoint                                  | Description           |
+| -------- | ----------------------------------------- | --------------------- |
+| `POST`   | `/rooms/{roomId}/messages`                | Send a message        |
+| `GET`    | `/rooms/{roomId}/messages`                | Get message history   |
+| `PATCH`  | `/rooms/{roomId}/messages/{messageId}`    | Edit a message        |
+| `DELETE` | `/rooms/{roomId}/messages/{messageId}`    | Soft-delete a message |
 
 ### Reactions
 
-| Method   | Endpoint                         | Description              |
-| -------- | -------------------------------- | ------------------------ |
-| `PUT`    | `/messages/{messageId}/reaction` | Add or update a reaction |
-| `DELETE` | `/messages/{messageId}/reaction` | Remove own reaction      |
+| Method   | Endpoint                                                  | Description              |
+| -------- | --------------------------------------------------------- | ------------------------ |
+| `POST`   | `/rooms/{roomId}/messages/{messageId}/reactions`          | Add or update a reaction |
+| `DELETE` | `/rooms/{roomId}/messages/{messageId}/reactions`          | Remove own reaction      |
 
 ### Read Cursors
 
@@ -124,7 +126,18 @@ Internal endpoints are protected with a service-to-service token.
 PATCH /internal/messages/{messageId}/attachments
 ```
 
-Used by the Attachment Service to attach uploaded file metadata to a message.
+Used by the Attachment Service to attach uploaded file metadata to a message. The header is `X-BadrLink-Internal-Token` with the value of `CHAT_INTERNAL_SERVICE_TOKEN`; a blank token closes `/internal/**` entirely.
+
+### Outbound calls to the User Service
+
+Contract fixed in the documentation audit (see `docs/INCOHERENCES_AND_RESOLUTIONS.md` INC-01); Chat is aligned to the User service's actual endpoints:
+
+```text
+GET /internal/users/{userId}        # profile existence: direct-room creation, invitation validation
+GET /internal/blocks/check?a=&b=    # symmetric block check, header X-Internal-Token
+```
+
+Both use `X-Internal-Token` (value of `USER_SERVICE_INTERNAL_TOKEN`) and are cache-first since Sprint 6: usernames resolve from `user_cache` with a JWT-claim fallback (no synchronous username call on the send path); block checks fall back to the synchronous call on a cache miss and fail closed (`503`) when the User service is unreachable.
 
 ---
 
@@ -226,7 +239,17 @@ Copy the example environment file and configure the required variables:
 cp .env.example .env
 ```
 
-Then update `.env` with your local configuration if needed.
+Key variables (full list in `.env.example`):
+
+```text
+MONGODB_URI                  # must include replicaSet=rs0 for transactions
+AUTH_JWK_SET_URI             # Auth JWKS endpoint (no endpoint ships yet — INC-02)
+CHAT_INTERNAL_SERVICE_TOKEN  # inbound /internal/** token
+USER_SERVICE_BASE_URL        # default http://localhost:8082
+USER_SERVICE_INTERNAL_TOKEN  # must equal User's INTERNAL_HMAC_SECRET
+USER_SERVICE_CONNECT_TIMEOUT / USER_SERVICE_READ_TIMEOUT  # 2s / 3s
+KAFKA_BOOTSTRAP_SERVERS / KAFKA_ENABLED / KAFKA_RELAY_INTERVAL / KAFKA_RELAY_BATCH
+```
 
 > **Note:** `.env` contains environment-specific values and should not be committed. Use `.env.example` as the template for required variables.
 
@@ -258,7 +281,22 @@ http://localhost:8083
 ./mvnw test
 ```
 
-The current test suite does not require an external database or Docker daemon.
+The test suite runs without a live MongoDB or Docker daemon (84 tests; repositories, caches and the outbox writer are mocked — see `docs/ADR_CHAT_SERVICE.md` ADR-016). Live-replica-set integration coverage is a documented follow-up.
+
+---
+
+## Events
+
+Published through the transactional outbox, one topic per aggregate:
+
+```text
+badrlink.chat.message.v1     MESSAGE_SENT, MESSAGE_EDITED, MESSAGE_DELETED,
+                             REACTION_ADDED, REACTION_REMOVED
+badrlink.chat.room.v1        ROOM_CREATED, PARTICIPANT_ADDED, PARTICIPANT_REMOVED
+badrlink.chat.invitation.v1  INVITATION_SENT, INVITATION_ACCEPTED, INVITATION_REJECTED
+```
+
+Consumed from `badrlink.user.profile.v1`: `USER_PROFILE_CREATED`, `USER_USERNAME_CHANGED` (feed `user_cache`), `USER_BLOCKED`, `USER_UNBLOCKED` (feed `block_cache`). Full payload reference: [`/docs/EVENTS.md`](../docs/EVENTS.md).
 
 ---
 
@@ -271,12 +309,16 @@ src/
 │   │   └── com/ziyadsamhaoui/messagingchatservice/
 │   │       ├── controller/
 │   │       ├── service/
+│   │       ├── cache/
 │   │       ├── repository/
 │   │       ├── model/
 │   │       ├── dto/
 │   │       ├── client/
 │   │       ├── config/
+│   │       ├── kafka/
 │   │       ├── security/
+│   │       ├── outbox/
+│   │       ├── web/
 │   │       └── exception/
 │   └── resources/
 │       └── application.yml
