@@ -15,6 +15,8 @@ import com.ziyadsamhaoui.messagingchatservice.model.ChatRoom;
 import com.ziyadsamhaoui.messagingchatservice.model.Participant;
 import com.ziyadsamhaoui.messagingchatservice.model.enums.ParticipantRole;
 import com.ziyadsamhaoui.messagingchatservice.model.enums.RoomType;
+import com.ziyadsamhaoui.messagingchatservice.outbox.ChatEvents;
+import com.ziyadsamhaoui.messagingchatservice.outbox.OutboxWriter;
 import com.ziyadsamhaoui.messagingchatservice.repository.ChatRoomRepository;
 import com.ziyadsamhaoui.messagingchatservice.repository.ParticipantRepository;
 import com.ziyadsamhaoui.messagingchatservice.service.RoomAccessService.RoomContext;
@@ -51,11 +53,12 @@ public class RoomService {
     private final CursorCodec cursorCodec;
     private final PageSizeResolver pageSizeResolver;
     private final ChatProperties chatProperties;
+    private final OutboxWriter outboxWriter;
 
     public RoomService(ChatRoomRepository chatRoomRepository, ParticipantRepository participantRepository,
             UserServiceClient userServiceClient, RoomWriter roomWriter, RoomAccessService roomAccessService,
             BlockPolicy blockPolicy, DirectKeyFactory directKeyFactory, CursorCodec cursorCodec,
-            PageSizeResolver pageSizeResolver, ChatProperties chatProperties) {
+            PageSizeResolver pageSizeResolver, ChatProperties chatProperties, OutboxWriter outboxWriter) {
 
         this.chatRoomRepository = chatRoomRepository;
         this.participantRepository = participantRepository;
@@ -67,6 +70,7 @@ public class RoomService {
         this.cursorCodec = cursorCodec;
         this.pageSizeResolver = pageSizeResolver;
         this.chatProperties = chatProperties;
+        this.outboxWriter = outboxWriter;
     }
 
     public CreationResult createRoom(String callerId, CreateRoomRequest request) {
@@ -205,6 +209,9 @@ public class RoomService {
         }
 
         participantRepository.deleteByRoomIdAndUserId(roomId, targetUserId);
+
+        outboxWriter.append("Participant", targetUserId, ChatEvents.PARTICIPANT_REMOVED,
+                new ChatEvents.ParticipantRemoved(roomId, targetUserId));
 
         List<Participant> remaining = participantRepository.findByRoomId(roomId).stream()
                 .filter(participant -> !participant.getUserId().equals(targetUserId))

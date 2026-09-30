@@ -16,6 +16,8 @@ import com.ziyadsamhaoui.messagingchatservice.model.enums.RoomType;
 import com.ziyadsamhaoui.messagingchatservice.repository.ChatRoomRepository;
 import com.ziyadsamhaoui.messagingchatservice.repository.MessageRepository;
 import com.ziyadsamhaoui.messagingchatservice.repository.ParticipantRepository;
+import com.ziyadsamhaoui.messagingchatservice.outbox.ChatEvents;
+import com.ziyadsamhaoui.messagingchatservice.outbox.OutboxWriter;
 import com.ziyadsamhaoui.messagingchatservice.service.RoomAccessService.RoomContext;
 import com.ziyadsamhaoui.messagingchatservice.service.support.BlockPolicy;
 import com.ziyadsamhaoui.messagingchatservice.service.support.CursorCodec;
@@ -30,6 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -46,11 +49,12 @@ public class MessageService {
     private final CursorCodec cursorCodec;
     private final PageSizeResolver pageSizeResolver;
     private final ChatProperties chatProperties;
+    private final OutboxWriter outboxWriter;
 
     public MessageService(MessageRepository messageRepository, ChatRoomRepository chatRoomRepository,
             ParticipantRepository participantRepository, RoomAccessService roomAccessService, BlockPolicy blockPolicy,
             SenderIdentityResolver senderIdentityResolver, CursorCodec cursorCodec, PageSizeResolver pageSizeResolver,
-            ChatProperties chatProperties) {
+            ChatProperties chatProperties, OutboxWriter outboxWriter) {
 
         this.messageRepository = messageRepository;
         this.chatRoomRepository = chatRoomRepository;
@@ -61,8 +65,10 @@ public class MessageService {
         this.cursorCodec = cursorCodec;
         this.pageSizeResolver = pageSizeResolver;
         this.chatProperties = chatProperties;
+        this.outboxWriter = outboxWriter;
     }
 
+    @Transactional
     public MessageResponse sendMessage(String callerId, String roomId, SendMessageRequest request) {
         RoomContext context = roomAccessService.requireParticipant(roomId, callerId);
         roomAccessService.requireNotMuted(context);
@@ -82,6 +88,10 @@ public class MessageService {
         message.setCreatedAt(Instant.now());
 
         Message saved = messageRepository.insert(message);
+
+        outboxWriter.append("Message", saved.getId(), ChatEvents.MESSAGE_SENT,
+                new ChatEvents.MessageSent(saved.getId(), roomId, saved.getSenderId(), saved.getSenderUsername(),
+                        saved.getType().name(), saved.getContent(), saved.getCreatedAt()));
         refreshLastMessage(roomId, saved.getId());
 
         return MessageResponse.from(saved);
@@ -134,9 +144,13 @@ public class MessageService {
         message.setEdited(true);
         message.setEditedAt(editedAt);
 
+        outboxWriter.append("Message", messageId, ChatEvents.MESSAGE_EDITED,
+                new ChatEvents.MessageEdited(messageId, roomId, request.content(), editedAt));
+
         return MessageResponse.from(message);
     }
 
+    @Transactional
     public void deleteMessage(String callerId, String roomId, String messageId) {
         RoomContext context = roomAccessService.requireParticipant(roomId, callerId);
         Message message = requireMessage(roomId, messageId);
@@ -153,6 +167,9 @@ public class MessageService {
         }
 
         messageRepository.softDelete(messageId);
+
+        outboxWriter.append("Message", messageId, ChatEvents.MESSAGE_DELETED,
+                new ChatEvents.MessageDeleted(messageId, roomId, Instant.now()));
 
         if (messageId.equals(context.room().getLastMessageId())) {
             String replacementId = messageRepository.findLatestActiveInRoom(roomId).map(Message::getId).orElse(null);

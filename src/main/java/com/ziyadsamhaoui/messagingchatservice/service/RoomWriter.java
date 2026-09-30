@@ -3,6 +3,8 @@ package com.ziyadsamhaoui.messagingchatservice.service;
 import com.ziyadsamhaoui.messagingchatservice.model.ChatRoom;
 import com.ziyadsamhaoui.messagingchatservice.model.Participant;
 import com.ziyadsamhaoui.messagingchatservice.model.enums.ParticipantRole;
+import com.ziyadsamhaoui.messagingchatservice.outbox.ChatEvents;
+import com.ziyadsamhaoui.messagingchatservice.outbox.OutboxWriter;
 import com.ziyadsamhaoui.messagingchatservice.repository.ChatRoomRepository;
 import com.ziyadsamhaoui.messagingchatservice.repository.ParticipantRepository;
 import java.time.Instant;
@@ -17,10 +19,13 @@ public class RoomWriter {
 
     private final ChatRoomRepository chatRoomRepository;
     private final ParticipantRepository participantRepository;
+    private final OutboxWriter outboxWriter;
 
-    public RoomWriter(ChatRoomRepository chatRoomRepository, ParticipantRepository participantRepository) {
+    public RoomWriter(ChatRoomRepository chatRoomRepository, ParticipantRepository participantRepository,
+            OutboxWriter outboxWriter) {
         this.chatRoomRepository = chatRoomRepository;
         this.participantRepository = participantRepository;
+        this.outboxWriter = outboxWriter;
     }
 
     @Transactional
@@ -30,6 +35,11 @@ public class RoomWriter {
         participantRepository.insert(List.of(
                 Participant.member(saved.getId(), creatorId, ParticipantRole.GUEST, createdAt),
                 Participant.member(saved.getId(), counterpartId, ParticipantRole.GUEST, createdAt)));
+
+        outboxWriter.append("ChatRoom", saved.getId(), ChatEvents.ROOM_CREATED,
+                new ChatEvents.RoomCreated(saved.getId(), "DIRECT", creatorId, createdAt));
+        appendParticipantAdded(saved.getId(), creatorId, ParticipantRole.GUEST);
+        appendParticipantAdded(saved.getId(), counterpartId, ParticipantRole.GUEST);
 
         return saved;
     }
@@ -45,6 +55,16 @@ public class RoomWriter {
 
         participantRepository.insert(participants);
 
+        outboxWriter.append("ChatRoom", saved.getId(), ChatEvents.ROOM_CREATED,
+                new ChatEvents.RoomCreated(saved.getId(), "GROUP", creatorId, createdAt));
+        appendParticipantAdded(saved.getId(), creatorId, ParticipantRole.OWNER);
+        memberIds.forEach(userId -> appendParticipantAdded(saved.getId(), userId, ParticipantRole.GUEST));
+
         return saved;
+    }
+
+    private void appendParticipantAdded(String roomId, String userId, ParticipantRole role) {
+        outboxWriter.append("Participant", userId, ChatEvents.PARTICIPANT_ADDED,
+                new ChatEvents.ParticipantAdded(roomId, userId, role.name()));
     }
 }

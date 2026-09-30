@@ -15,6 +15,8 @@ import com.ziyadsamhaoui.messagingchatservice.model.Participant;
 import com.ziyadsamhaoui.messagingchatservice.model.enums.InvitationStatus;
 import com.ziyadsamhaoui.messagingchatservice.model.enums.ParticipantRole;
 import com.ziyadsamhaoui.messagingchatservice.model.enums.RoomType;
+import com.ziyadsamhaoui.messagingchatservice.outbox.ChatEvents;
+import com.ziyadsamhaoui.messagingchatservice.outbox.OutboxWriter;
 import com.ziyadsamhaoui.messagingchatservice.repository.ChatRoomRepository;
 import com.ziyadsamhaoui.messagingchatservice.repository.InvitationRepository;
 import com.ziyadsamhaoui.messagingchatservice.repository.ParticipantRepository;
@@ -33,10 +35,11 @@ public class InvitationService {
     private final RoomAccessService roomAccessService;
     private final UserServiceClient userServiceClient;
     private final ChatProperties chatProperties;
+    private final OutboxWriter outboxWriter;
 
     public InvitationService(InvitationRepository invitationRepository, ParticipantRepository participantRepository,
             ChatRoomRepository chatRoomRepository, RoomAccessService roomAccessService,
-            UserServiceClient userServiceClient, ChatProperties chatProperties) {
+            UserServiceClient userServiceClient, ChatProperties chatProperties, OutboxWriter outboxWriter) {
 
         this.invitationRepository = invitationRepository;
         this.participantRepository = participantRepository;
@@ -44,6 +47,7 @@ public class InvitationService {
         this.roomAccessService = roomAccessService;
         this.userServiceClient = userServiceClient;
         this.chatProperties = chatProperties;
+        this.outboxWriter = outboxWriter;
     }
 
     public InvitationResponse invite(String callerId, String roomId, CreateInvitationRequest request) {
@@ -83,7 +87,12 @@ public class InvitationService {
         invitation.setSentAt(now);
         invitation.setExpiresAt(now.plus(resolveTtl(request.ttl())));
 
-        return InvitationResponse.from(invitationRepository.insert(invitation));
+        Invitation saved = invitationRepository.insert(invitation);
+        // Sprint 6 §2.3: same transaction as the invitation insert.
+        outboxWriter.append("Invitation", saved.getId(), ChatEvents.INVITATION_SENT,
+                new ChatEvents.InvitationSent(saved.getId(), roomId, invitedId, callerId, now));
+
+        return InvitationResponse.from(saved);
     }
 
     @Transactional
@@ -102,9 +111,15 @@ public class InvitationService {
         if (!participantRepository.existsByRoomIdAndUserId(room.getId(), callerId)) {
             participantRepository
                     .insert(Participant.member(room.getId(), callerId, ParticipantRole.GUEST, Instant.now()));
+            // Sprint 6 §2.3: participant arrival via invitation is a PARTICIPANT_ADDED too.
+            outboxWriter.append("Participant", callerId, ChatEvents.PARTICIPANT_ADDED,
+                    new ChatEvents.ParticipantAdded(room.getId(), callerId, ParticipantRole.GUEST.name()));
         }
 
         invitation.setStatus(InvitationStatus.ACCEPTED);
+
+        outboxWriter.append("Invitation", invitationId, ChatEvents.INVITATION_ACCEPTED,
+                new ChatEvents.InvitationAccepted(invitationId, invitation.getRoomId(), callerId, Instant.now()));
 
         return InvitationResponse.from(invitation);
     }
@@ -122,6 +137,9 @@ public class InvitationService {
         }
 
         invitation.setStatus(InvitationStatus.REJECTED);
+
+        outboxWriter.append("Invitation", invitationId, ChatEvents.INVITATION_REJECTED,
+                new ChatEvents.InvitationRejected(invitationId, invitation.getRoomId(), callerId, Instant.now()));
 
         return InvitationResponse.from(invitation);
     }
