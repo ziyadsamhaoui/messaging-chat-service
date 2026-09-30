@@ -9,6 +9,8 @@ spring:
           jwk-set-uri: http://localhost:8081/.well-known/jwks.json
 
 badrlink:
+  kafka:
+    enabled: false
   chat:
     ensure-indexes: false
     internal-service-token: test-internal-token

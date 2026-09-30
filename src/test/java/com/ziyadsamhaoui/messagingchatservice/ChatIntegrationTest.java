@@ -3,8 +3,10 @@ package com.ziyadsamhaoui.messagingchatservice;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 
+import com.ziyadsamhaoui.messagingchatservice.cache.BlockCacheService;
+import com.ziyadsamhaoui.messagingchatservice.cache.UserCacheService;
 import com.ziyadsamhaoui.messagingchatservice.client.UserServiceClient;
-import com.ziyadsamhaoui.messagingchatservice.client.dto.UserProfileResponse;
+import com.ziyadsamhaoui.messagingchatservice.outbox.OutboxWriter;
 import com.ziyadsamhaoui.messagingchatservice.model.ChatRoom;
 import com.ziyadsamhaoui.messagingchatservice.model.Participant;
 import com.ziyadsamhaoui.messagingchatservice.repository.ChatRoomRepository;
@@ -60,6 +62,20 @@ public abstract class ChatIntegrationTest {
     @MockitoBean
     protected UserServiceClient userServiceClient;
 
+    /**
+     * Sprint 6: the outbox write and both caches are mocked so the suites stay
+     * database-free (ADR-016) — the real Mongo behaviour is covered by the
+     * relay/cache unit tests and against a replica set in integration environments.
+     */
+    @MockitoBean
+    protected OutboxWriter outboxWriter;
+
+    @MockitoBean
+    protected UserCacheService userCacheService;
+
+    @MockitoBean
+    protected BlockCacheService blockCacheService;
+
     protected static JwtRequestPostProcessor authenticatedAs(String userId) {
         return jwt().jwt(jwt -> jwt.subject(userId));
     }
@@ -73,8 +89,12 @@ public abstract class ChatIntegrationTest {
         }
     }
 
+    /**
+     * Sprint 6: username resolution now reads the local cache fed by profile events;
+     * the synchronous profile call is no longer on the message-send path.
+     */
     protected void givenUsername(String userId, String username) {
-        when(userServiceClient.getProfile(userId)).thenReturn(new UserProfileResponse(userId, username));
+        when(userCacheService.lookup(userId)).thenReturn(Optional.of(username));
     }
 
     /**

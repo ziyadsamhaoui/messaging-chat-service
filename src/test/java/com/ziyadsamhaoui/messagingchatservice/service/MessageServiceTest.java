@@ -61,7 +61,8 @@ class MessageServiceTest {
 
         messageService = new MessageService(messageRepository, chatRoomRepository, participantRepository,
                 new RoomAccessService(chatRoomRepository, participantRepository), blockPolicy, senderIdentityResolver,
-                new CursorCodec(), new PageSizeResolver(chatProperties), chatProperties);
+                new CursorCodec(), new PageSizeResolver(chatProperties), chatProperties,
+                mock(com.ziyadsamhaoui.messagingchatservice.outbox.OutboxWriter.class));
     }
 
     @Test
