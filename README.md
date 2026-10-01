@@ -5,6 +5,7 @@
 [![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1.1-6DB33F?style=flat-square\&logo=springboot\&logoColor=white)](https://spring.io/projects/spring-boot)
 [![Java](https://img.shields.io/badge/Java-21-ED8B00?style=flat-square\&logo=openjdk\&logoColor=white)](https://www.oracle.com/java/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-8-47A248?style=flat-square\&logo=mongodb\&logoColor=white)](https://www.mongodb.com/)
+[![Kafka](https://img.shields.io/badge/Kafka-4.1.1-231F20?style=flat-square\&logo=apachekafka\&logoColor=white)](https://kafka.apache.org/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square\&logo=docker\&logoColor=white)](https://www.docker.com/)
 [![Maven](https://img.shields.io/badge/Maven-Build-C71A36?style=flat-square\&logo=apachemaven\&logoColor=white)](https://maven.apache.org/)
 
@@ -239,19 +240,6 @@ Copy the example environment file and configure the required variables:
 cp .env.example .env
 ```
 
-Key variables (full list in `.env.example`):
-
-```text
-MONGODB_URI                  # must include replicaSet=rs0 for transactions
-AUTH_JWK_SET_URI             # Auth JWKS endpoint (no endpoint ships yet — INC-02)
-CHAT_INTERNAL_SERVICE_TOKEN  # inbound /internal/** token
-USER_SERVICE_BASE_URL        # default http://localhost:8082
-USER_SERVICE_INTERNAL_TOKEN  # must equal User's INTERNAL_HMAC_SECRET
-USER_SERVICE_CONNECT_TIMEOUT / USER_SERVICE_READ_TIMEOUT  # 2s / 3s
-KAFKA_BOOTSTRAP_SERVERS / KAFKA_ENABLED / KAFKA_RELAY_INTERVAL / KAFKA_RELAY_BATCH
-```
-
-> **Note:** `.env` contains environment-specific values and should not be committed. Use `.env.example` as the template for required variables.
 
 ### Start MongoDB
 
@@ -282,21 +270,6 @@ http://localhost:8083
 ```
 
 The test suite runs without a live MongoDB or Docker daemon (84 tests; repositories, caches and the outbox writer are mocked — see `docs/ADR_CHAT_SERVICE.md` ADR-016). Live-replica-set integration coverage is a documented follow-up.
-
----
-
-## Events
-
-Published through the transactional outbox, one topic per aggregate:
-
-```text
-badrlink.chat.message.v1     MESSAGE_SENT, MESSAGE_EDITED, MESSAGE_DELETED,
-                             REACTION_ADDED, REACTION_REMOVED
-badrlink.chat.room.v1        ROOM_CREATED, PARTICIPANT_ADDED, PARTICIPANT_REMOVED
-badrlink.chat.invitation.v1  INVITATION_SENT, INVITATION_ACCEPTED, INVITATION_REJECTED
-```
-
-Consumed from `badrlink.user.profile.v1`: `USER_PROFILE_CREATED`, `USER_USERNAME_CHANGED` (feed `user_cache`), `USER_BLOCKED`, `USER_UNBLOCKED` (feed `block_cache`). Full payload reference: [`/docs/EVENTS.md`](../docs/EVENTS.md).
 
 ---
 
