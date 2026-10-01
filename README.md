@@ -1,6 +1,6 @@
 # BadrLink - Chat Service
 
-**The conversation and messaging persistence service powering BadrLink, built with Java, Spring Boot, MongoDB, and Spring Security.**
+**The conversation and messaging persistence service powering BadrLink, built with Java, Spring Boot, MongoDB, and Kafka.**
 
 [![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1.1-6DB33F?style=flat-square\&logo=springboot\&logoColor=white)](https://spring.io/projects/spring-boot)
 [![Java](https://img.shields.io/badge/Java-21-ED8B00?style=flat-square\&logo=openjdk\&logoColor=white)](https://www.oracle.com/java/)
