@@ -21,6 +21,7 @@ import com.ziyadsamhaoui.messagingchatservice.repository.ChatRoomRepository;
 import com.ziyadsamhaoui.messagingchatservice.repository.InvitationRepository;
 import com.ziyadsamhaoui.messagingchatservice.repository.ParticipantRepository;
 import com.ziyadsamhaoui.messagingchatservice.service.RoomAccessService.RoomContext;
+import com.ziyadsamhaoui.messagingchatservice.service.support.SenderIdentityResolver;
 import java.time.Duration;
 import java.time.Instant;
 import org.springframework.stereotype.Service;
@@ -34,22 +35,26 @@ public class InvitationService {
     private final ChatRoomRepository chatRoomRepository;
     private final RoomAccessService roomAccessService;
     private final UserServiceClient userServiceClient;
+    private final SenderIdentityResolver senderIdentityResolver;
     private final ChatProperties chatProperties;
     private final OutboxWriter outboxWriter;
 
     public InvitationService(InvitationRepository invitationRepository, ParticipantRepository participantRepository,
             ChatRoomRepository chatRoomRepository, RoomAccessService roomAccessService,
-            UserServiceClient userServiceClient, ChatProperties chatProperties, OutboxWriter outboxWriter) {
+            UserServiceClient userServiceClient, SenderIdentityResolver senderIdentityResolver,
+            ChatProperties chatProperties, OutboxWriter outboxWriter) {
 
         this.invitationRepository = invitationRepository;
         this.participantRepository = participantRepository;
         this.chatRoomRepository = chatRoomRepository;
         this.roomAccessService = roomAccessService;
         this.userServiceClient = userServiceClient;
+        this.senderIdentityResolver = senderIdentityResolver;
         this.chatProperties = chatProperties;
         this.outboxWriter = outboxWriter;
     }
 
+    @Transactional
     public InvitationResponse invite(String callerId, String roomId, CreateInvitationRequest request) {
         RoomContext context = roomAccessService.requireOwnerOrAdmin(roomId, callerId);
 
@@ -90,7 +95,8 @@ public class InvitationService {
         Invitation saved = invitationRepository.insert(invitation);
         // Sprint 6 §2.3: same transaction as the invitation insert.
         outboxWriter.append("Invitation", saved.getId(), ChatEvents.INVITATION_SENT,
-                new ChatEvents.InvitationSent(saved.getId(), roomId, invitedId, callerId, now));
+                new ChatEvents.InvitationSent(saved.getId(), roomId, invitedId, callerId,
+                        context.room().getName(), senderIdentityResolver.resolveUsername(callerId), now));
 
         return InvitationResponse.from(saved);
     }
@@ -119,7 +125,8 @@ public class InvitationService {
         invitation.setStatus(InvitationStatus.ACCEPTED);
 
         outboxWriter.append("Invitation", invitationId, ChatEvents.INVITATION_ACCEPTED,
-                new ChatEvents.InvitationAccepted(invitationId, invitation.getRoomId(), callerId, Instant.now()));
+                new ChatEvents.InvitationAccepted(invitationId, invitation.getRoomId(), callerId,
+                        invitation.getInviterId(), senderIdentityResolver.resolveUsername(callerId), Instant.now()));
 
         return InvitationResponse.from(invitation);
     }

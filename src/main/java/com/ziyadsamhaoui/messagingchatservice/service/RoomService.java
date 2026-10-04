@@ -133,6 +133,7 @@ public class RoomService {
         return CursorPage.of(items, nextCursor, hasMore);
     }
 
+    @Transactional
     public ParticipantResponse updateParticipant(String callerId, String roomId, String targetUserId,
             UpdateParticipantRequest request) {
 
@@ -187,6 +188,14 @@ public class RoomService {
             participantRepository.updateMute(roomId, targetUserId, muted, mutedUntil);
             target.setMuted(muted);
             target.setMutedUntil(mutedUntil);
+
+            if (muted) {
+                outboxWriter.append("Participant", targetUserId, ChatEvents.PARTICIPANT_MUTED,
+                        new ChatEvents.ParticipantMuted(roomId, targetUserId, true, mutedUntil));
+            } else {
+                outboxWriter.append("Participant", targetUserId, ChatEvents.PARTICIPANT_UNMUTED,
+                        new ChatEvents.ParticipantUnmuted(roomId, targetUserId));
+            }
         }
 
         return ParticipantResponse.from(target);

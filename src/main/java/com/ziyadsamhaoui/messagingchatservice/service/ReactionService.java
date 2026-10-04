@@ -10,6 +10,7 @@ import com.ziyadsamhaoui.messagingchatservice.outbox.ChatEvents;
 import com.ziyadsamhaoui.messagingchatservice.outbox.OutboxWriter;
 import com.ziyadsamhaoui.messagingchatservice.repository.MessageReactionRepository;
 import com.ziyadsamhaoui.messagingchatservice.repository.MessageRepository;
+import com.ziyadsamhaoui.messagingchatservice.service.support.SenderIdentityResolver;
 import java.time.Instant;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,14 +21,17 @@ public class ReactionService {
     private final MessageRepository messageRepository;
     private final MessageReactionRepository messageReactionRepository;
     private final RoomAccessService roomAccessService;
+    private final SenderIdentityResolver senderIdentityResolver;
     private final OutboxWriter outboxWriter;
 
     public ReactionService(MessageRepository messageRepository, MessageReactionRepository messageReactionRepository,
-            RoomAccessService roomAccessService, OutboxWriter outboxWriter) {
+            RoomAccessService roomAccessService, SenderIdentityResolver senderIdentityResolver,
+            OutboxWriter outboxWriter) {
 
         this.messageRepository = messageRepository;
         this.messageReactionRepository = messageReactionRepository;
         this.roomAccessService = roomAccessService;
+        this.senderIdentityResolver = senderIdentityResolver;
         this.outboxWriter = outboxWriter;
     }
 
@@ -48,7 +52,8 @@ public class ReactionService {
 
         MessageReaction saved = messageReactionRepository.upsert(reaction);
         outboxWriter.append("MessageReaction", messageId, ChatEvents.REACTION_ADDED,
-                new ChatEvents.ReactionAdded(messageId, roomId, callerId, request.emoji(), saved.getReactedAt()));
+                new ChatEvents.ReactionAdded(messageId, roomId, callerId,
+                        senderIdentityResolver.resolveUsername(callerId), request.emoji(), saved.getReactedAt()));
         return ReactionResponse.from(saved);
     }
 

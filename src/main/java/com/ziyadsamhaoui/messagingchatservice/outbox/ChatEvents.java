@@ -21,6 +21,8 @@ public final class ChatEvents {
     public static final String ROOM_CREATED = "ROOM_CREATED";
     public static final String PARTICIPANT_ADDED = "PARTICIPANT_ADDED";
     public static final String PARTICIPANT_REMOVED = "PARTICIPANT_REMOVED";
+    public static final String PARTICIPANT_MUTED = "PARTICIPANT_MUTED";
+    public static final String PARTICIPANT_UNMUTED = "PARTICIPANT_UNMUTED";
     public static final String INVITATION_SENT = "INVITATION_SENT";
     public static final String INVITATION_ACCEPTED = "INVITATION_ACCEPTED";
     public static final String INVITATION_REJECTED = "INVITATION_REJECTED";
@@ -35,7 +37,8 @@ public final class ChatEvents {
     public record MessageDeleted(String messageId, String roomId, Instant deletedAt) {
     }
 
-    public record ReactionAdded(String messageId, String roomId, String userId, String emoji, Instant reactedAt) {
+    public record ReactionAdded(String messageId, String roomId, String userId, String reactorUsername, String emoji,
+            Instant reactedAt) {
     }
 
     public record ReactionRemoved(String messageId, String roomId, String userId, Instant removedAt) {
@@ -50,11 +53,18 @@ public final class ChatEvents {
     public record ParticipantRemoved(String roomId, String userId) {
     }
 
-    public record InvitationSent(String invitationId, String roomId, String invitedId, String inviterId,
-            Instant sentAt) {
+    public record ParticipantMuted(String roomId, String userId, boolean muted, Instant mutedUntil) {
     }
 
-    public record InvitationAccepted(String invitationId, String roomId, String invitedId, Instant acceptedAt) {
+    public record ParticipantUnmuted(String roomId, String userId) {
+    }
+
+    public record InvitationSent(String invitationId, String roomId, String invitedId, String inviterId,
+            String roomName, String inviterUsername, Instant sentAt) {
+    }
+
+    public record InvitationAccepted(String invitationId, String roomId, String invitedId, String inviterId,
+            String invitedUsername, Instant acceptedAt) {
     }
 
     public record InvitationRejected(String invitationId, String roomId, String invitedId, Instant rejectedAt) {
