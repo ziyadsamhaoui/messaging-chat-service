@@ -68,7 +68,7 @@ The Chat Service is part of the BadrLink microservices architecture.
                     └─────────────────────┘
 ```
 
-The service validates Auth-issued JWTs using the Auth Service JWKS (planned; HS256 shared-secret mode today — see `docs/INCOHERENCES_AND_RESOLUTIONS.md` INC-02) and communicates with the User Service for profile existence and block checks. Since Sprint 6 it also consumes User's profile and block events into local caches, publishes message/room/invitation events through a transactional outbox, and emits the username from a cache with a JWT-claim fallback instead of a synchronous lookup.
+The service validates Auth-issued JWTs against the Auth Service JWKS at `/oauth2/jwks` and communicates with the User Service for profile existence and block checks. Since Sprint 6 it also consumes User's profile and block events into local caches, publishes message/room/invitation events through a transactional outbox, and emits the username from a cache with a JWT-claim fallback instead of a synchronous lookup.
 
 The service is **REST-only** in the current sprint. Real-time WebSocket/STOMP delivery is handled by the Realtime Gateway in a later sprint.
 
@@ -243,7 +243,7 @@ Key variables (full list in `.env.example`):
 
 ```text
 MONGODB_URI                  # must include replicaSet=rs0 for transactions
-AUTH_JWK_SET_URI             # Auth JWKS endpoint (no endpoint ships yet — INC-02)
+AUTH_JWK_SET_URI             # default http://messaging-auth-service:8081/oauth2/jwks
 CHAT_INTERNAL_SERVICE_TOKEN  # inbound /internal/** token
 USER_SERVICE_BASE_URL        # default http://localhost:8082
 USER_SERVICE_INTERNAL_TOKEN  # must equal User's INTERNAL_HMAC_SECRET
@@ -292,9 +292,16 @@ Published through the transactional outbox, one topic per aggregate:
 ```text
 badrlink.chat.message.v1     MESSAGE_SENT, MESSAGE_EDITED, MESSAGE_DELETED,
                              REACTION_ADDED, REACTION_REMOVED
-badrlink.chat.room.v1        ROOM_CREATED, PARTICIPANT_ADDED, PARTICIPANT_REMOVED
+badrlink.chat.room.v1        ROOM_CREATED, PARTICIPANT_ADDED, PARTICIPANT_REMOVED,
+                             PARTICIPANT_MUTED, PARTICIPANT_UNMUTED
 badrlink.chat.invitation.v1  INVITATION_SENT, INVITATION_ACCEPTED, INVITATION_REJECTED
 ```
+
+Sprint 7 added payload fields additively for the Notification service:
+`REACTION_ADDED` carries `reactorUsername`; `INVITATION_SENT` carries `roomName`
+and `inviterUsername`; `INVITATION_ACCEPTED` carries `inviterId` and
+`invitedUsername`; and a participant mute change now emits
+`PARTICIPANT_MUTED`/`PARTICIPANT_UNMUTED`.
 
 Consumed from `badrlink.user.profile.v1`: `USER_PROFILE_CREATED`, `USER_USERNAME_CHANGED` (feed `user_cache`), `USER_BLOCKED`, `USER_UNBLOCKED` (feed `block_cache`). Full payload reference: [`/docs/EVENTS.md`](../docs/EVENTS.md).
 
@@ -330,7 +337,7 @@ src/
 
 ## Testing
 
-The service currently contains **61 tests** covering:
+The service currently contains **84 tests** covering:
 
 * Authentication and authorization
 * Room access rules
