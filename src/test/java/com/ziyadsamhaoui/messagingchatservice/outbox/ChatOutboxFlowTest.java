@@ -1,12 +1,15 @@
 package com.ziyadsamhaoui.messagingchatservice.outbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -30,6 +33,7 @@ import com.ziyadsamhaoui.messagingchatservice.service.support.PageSizeResolver;
 import com.ziyadsamhaoui.messagingchatservice.service.support.SenderIdentityResolver;
 import com.ziyadsamhaoui.messagingchatservice.config.ChatProperties;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -110,6 +114,43 @@ class ChatOutboxFlowTest {
     }
 
     @Test
+    void editMessagePersistsTheNewContentAndAppendsExactlyOneEditedEvent() {
+        ChatRoom room = ChatTestFixtures.groupRoom(CALLER);
+        givenEditableMessage(room, ChatTestFixtures.textMessage(CALLER));
+
+        messageService.editMessage(CALLER, room.getId(), ChatTestFixtures.MESSAGE_ID,
+                new EditMessageRequest("edited body"));
+
+        verify(messageRepository).updateContent(eq(ChatTestFixtures.MESSAGE_ID), eq("edited body"), any(Instant.class));
+        verify(outboxWriter, times(1)).append(eq("Message"), eq(ChatTestFixtures.MESSAGE_ID),
+                eq(ChatEvents.MESSAGE_EDITED), any(ChatEvents.MessageEdited.class));
+    }
+
+    @Test
+    void failureWhileUpdatingTheMessageLeavesNoOutboxEventBehind() {
+        ChatRoom room = ChatTestFixtures.groupRoom(CALLER);
+        givenEditableMessage(room, ChatTestFixtures.textMessage(CALLER));
+        doThrow(new RuntimeException("mongo down")).when(messageRepository)
+                .updateContent(anyString(), anyString(), any(Instant.class));
+
+        assertThatThrownBy(() -> messageService.editMessage(CALLER, room.getId(), ChatTestFixtures.MESSAGE_ID,
+                new EditMessageRequest("edited body"))).isInstanceOf(RuntimeException.class);
+
+        verify(outboxWriter, never()).append(anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    void failureWhileAppendingTheOutboxEventPropagatesSoTheTransactionRollsBack() {
+        ChatRoom room = ChatTestFixtures.groupRoom(CALLER);
+        givenEditableMessage(room, ChatTestFixtures.textMessage(CALLER));
+        doThrow(new IllegalStateException("outbox down")).when(outboxWriter)
+                .append(anyString(), anyString(), anyString(), any());
+
+        assertThatThrownBy(() -> messageService.editMessage(CALLER, room.getId(), ChatTestFixtures.MESSAGE_ID,
+                new EditMessageRequest("edited body"))).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     void deleteMessageAppendsMessageDeleted() {
         ChatRoom room = ChatTestFixtures.groupRoom(CALLER);
         Message message = ChatTestFixtures.textMessage(CALLER);
@@ -179,5 +220,13 @@ class ChatOutboxFlowTest {
         }
 
         verify(outboxWriter, never()).append(anyString(), anyString(), anyString(), any());
+    }
+
+    private void givenEditableMessage(ChatRoom room, Message message) {
+        when(chatRoomRepository.findById(room.getId())).thenReturn(Optional.of(room));
+        when(participantRepository.findByRoomIdAndUserId(room.getId(), CALLER))
+                .thenReturn(Optional.of(ChatTestFixtures.participant(CALLER, ParticipantRole.GUEST)));
+        when(messageRepository.findByIdAndRoomId(ChatTestFixtures.MESSAGE_ID, room.getId()))
+                .thenReturn(Optional.of(message));
     }
 }

@@ -10,6 +10,8 @@ public interface InvitationRepository extends MongoRepository<Invitation, String
 
     List<Invitation> findByInvitedIdAndStatus(String invitedId, InvitationStatus status);
 
+    List<Invitation> findByInviterIdAndStatus(String inviterId, InvitationStatus status);
+
     List<Invitation> findByRoomIdAndStatus(String roomId, InvitationStatus status);
 
     boolean existsByRoomIdAndInvitedIdAndStatus(String roomId, String invitedId, InvitationStatus status);

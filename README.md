@@ -112,11 +112,12 @@ Centralized references: [`/docs/API_ENDPOINTS.md`](../docs/API_ENDPOINTS.md) (al
 
 ### Invitations
 
-| Method | Endpoint                             | Description              |
-| ------ | ------------------------------------ | ------------------------ |
-| `POST` | `/rooms/{roomId}/invitations`        | Invite a user to a group |
-| `POST` | `/invitations/{invitationId}/accept` | Accept an invitation     |
-| `POST` | `/invitations/{invitationId}/reject` | Reject an invitation     |
+| Method | Endpoint                             | Description                                             |
+| ------ | ------------------------------------ | ------------------------------------------------------- |
+| `POST` | `/rooms/{roomId}/invitations`        | Invite a user to a group                                |
+| `GET`  | `/invitations/pending`               | Caller's pending invitations, incoming and outgoing    |
+| `POST` | `/invitations/{invitationId}/accept` | Accept an invitation                                    |
+| `POST` | `/invitations/{invitationId}/reject` | Reject an invitation                                    |
 
 ### Internal
 
@@ -138,6 +139,8 @@ GET /internal/blocks/check?a=&b=    # symmetric block check, header X-Internal-T
 ```
 
 Both use `X-Internal-Token` (value of `USER_SERVICE_INTERNAL_TOKEN`) and are cache-first since Sprint 6: usernames resolve from `user_cache` with a JWT-claim fallback (no synchronous username call on the send path); block checks fall back to the synchronous call on a cache miss and fail closed (`503`) when the User service is unreachable.
+
+The profile call is pinned by a stub-server contract test (`HttpUserServiceClientContractTest`) that drives the real `HttpUserServiceClient` against a fake User service — the path, the header, and the `404` (`USER_NOT_FOUND`) vs `5xx`/unreachable (`DEPENDENCY_UNAVAILABLE`) mapping — so the contract cannot drift silently again (INC-01).
 
 ---
 

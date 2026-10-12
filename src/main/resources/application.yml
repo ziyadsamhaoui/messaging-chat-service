@@ -5,9 +5,10 @@ server:
 spring:
   application:
     name: messaging-chat-service
+  config:
+    import: "optional:file:.env[.properties]"
   data:
     mongodb:
-      uri: ${MONGODB_URI:mongodb://root:secret@localhost:27017/messaging_chat?authSource=admin&replicaSet=rs0}
       auto-index-creation: false
   security:
     oauth2:
@@ -22,6 +23,8 @@ spring:
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
   lifecycle:
     timeout-per-shutdown-phase: 20s
+  mongodb:
+    uri: ${MONGODB_URI}
 
 badrlink:
   kafka:

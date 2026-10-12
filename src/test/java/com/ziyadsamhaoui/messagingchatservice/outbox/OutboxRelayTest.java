@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -110,6 +111,50 @@ class OutboxRelayTest {
         verify(kafkaTemplate, never()).send(anyString(), anyString(), anyString());
     }
 
+    @Test
+    void publishesLegacyStoredPayloadAsPlainJson() throws Exception {
+        Document legacyPayload = Document.parse("""
+                {"_children":{"content":{"_value":"hello",
+                "_class":"tools.jackson.databind.node.StringNode"},"count":{"_value":42,
+                "_class":"tools.jackson.databind.node.IntNode"}},"_nodeFactory":{},
+                "_class":"tools.jackson.databind.node.ObjectNode"}""");
+        OutboxEvent event = OutboxEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .aggregateType("Message")
+                .aggregateId("msg-1")
+                .eventType(ChatEvents.MESSAGE_SENT)
+                .eventVersion(1)
+                .payload(legacyPayload)
+                .createdAt(Instant.now())
+                .build();
+        when(mongoTemplate.find(any(Query.class), eq(OutboxEvent.class), eq(OutboxEvent.COLLECTION)))
+                .thenReturn(List.of(event));
+        when(kafkaTemplate.send(anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(mock(SendResult.class)));
+
+        relay.publishPending();
+
+        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+        verify(kafkaTemplate).send(eq(ChatEvents.TOPIC_MESSAGE), eq("msg-1"), body.capture());
+        JsonNode envelope = MAPPER.readTree(body.getValue());
+        assertThat(envelope.get("payload").get("content").asString()).isEqualTo("hello");
+        assertThat(envelope.get("payload").get("count").asInt()).isEqualTo(42);
+        assertThat(envelope.get("payload").has("_children")).isFalse();
+        verify(mongoTemplate).updateFirst(any(Query.class), any(Update.class), eq(OutboxEvent.COLLECTION));
+    }
+
+    @Test
+    void unmappedAggregateKeepsTheEventPendingAndDoesNotBreakTheTick() {
+        OutboxEvent event = eventFor("Unknown", "SOMETHING_HAPPENED", new Object());
+        when(mongoTemplate.find(any(Query.class), eq(OutboxEvent.class), eq(OutboxEvent.COLLECTION)))
+                .thenReturn(List.of(event));
+
+        relay.publishPending();
+
+        verify(kafkaTemplate, never()).send(anyString(), anyString(), anyString());
+        verify(mongoTemplate, never()).updateFirst(any(Query.class), any(Update.class), anyString());
+    }
+
     private String topicUsedFor(String aggregateType) {
         @SuppressWarnings("unchecked")
         KafkaTemplate<String, String> template = mock(KafkaTemplate.class);
@@ -133,7 +178,7 @@ class OutboxRelayTest {
                 .aggregateId("msg-1")
                 .eventType(eventType)
                 .eventVersion(1)
-                .payload(MAPPER.valueToTree(payload))
+                .payload(Document.parse(MAPPER.writeValueAsString(payload)))
                 .createdAt(Instant.now())
                 .build();
     }

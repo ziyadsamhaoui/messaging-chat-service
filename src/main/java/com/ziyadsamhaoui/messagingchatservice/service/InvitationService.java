@@ -4,6 +4,7 @@ import com.ziyadsamhaoui.messagingchatservice.client.UserServiceClient;
 import com.ziyadsamhaoui.messagingchatservice.config.ChatProperties;
 import com.ziyadsamhaoui.messagingchatservice.dto.request.CreateInvitationRequest;
 import com.ziyadsamhaoui.messagingchatservice.dto.response.InvitationResponse;
+import com.ziyadsamhaoui.messagingchatservice.dto.response.PendingInvitationResponse;
 import com.ziyadsamhaoui.messagingchatservice.exception.ConflictException;
 import com.ziyadsamhaoui.messagingchatservice.exception.InvalidRequestException;
 import com.ziyadsamhaoui.messagingchatservice.exception.InvitationExpiredException;
@@ -12,6 +13,7 @@ import com.ziyadsamhaoui.messagingchatservice.exception.RoomAccessDeniedExceptio
 import com.ziyadsamhaoui.messagingchatservice.model.ChatRoom;
 import com.ziyadsamhaoui.messagingchatservice.model.Invitation;
 import com.ziyadsamhaoui.messagingchatservice.model.Participant;
+import com.ziyadsamhaoui.messagingchatservice.model.enums.InvitationDirection;
 import com.ziyadsamhaoui.messagingchatservice.model.enums.InvitationStatus;
 import com.ziyadsamhaoui.messagingchatservice.model.enums.ParticipantRole;
 import com.ziyadsamhaoui.messagingchatservice.model.enums.RoomType;
@@ -24,6 +26,9 @@ import com.ziyadsamhaoui.messagingchatservice.service.RoomAccessService.RoomCont
 import com.ziyadsamhaoui.messagingchatservice.service.support.SenderIdentityResolver;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -101,6 +106,27 @@ public class InvitationService {
         return InvitationResponse.from(saved);
     }
 
+    /**
+     * The caller's pending-invitation inbox: every {@code PENDING} invitation they
+     * sent (OUTGOING) or received (INCOMING), newest first. Answering an invitation
+     * flips its status, so completed invitations drop out of this list on the next
+     * read — there is no separate bookkeeping to keep in sync.
+     */
+    @Transactional(readOnly = true)
+    public List<PendingInvitationResponse> listPending(String callerId) {
+        Stream<PendingInvitationResponse> incoming = invitationRepository
+                .findByInvitedIdAndStatus(callerId, InvitationStatus.PENDING).stream()
+                .map(invitation -> toPending(invitation, InvitationDirection.INCOMING));
+        Stream<PendingInvitationResponse> outgoing = invitationRepository
+                .findByInviterIdAndStatus(callerId, InvitationStatus.PENDING).stream()
+                .map(invitation -> toPending(invitation, InvitationDirection.OUTGOING));
+
+        return Stream.concat(incoming, outgoing)
+                .sorted(Comparator.comparing(PendingInvitationResponse::sentAt,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
+    }
+
     @Transactional
     public InvitationResponse accept(String callerId, String invitationId) {
         Invitation invitation = requirePendingInvitation(callerId, invitationId);
@@ -168,6 +194,13 @@ public class InvitationService {
         }
 
         return invitation;
+    }
+
+    private PendingInvitationResponse toPending(Invitation invitation, InvitationDirection direction) {
+        String roomName = chatRoomRepository.findById(invitation.getRoomId())
+                .map(ChatRoom::getName)
+                .orElse(null);
+        return PendingInvitationResponse.of(invitation, direction, roomName);
     }
 
     private ChatRoom requireActiveRoom(String roomId) {

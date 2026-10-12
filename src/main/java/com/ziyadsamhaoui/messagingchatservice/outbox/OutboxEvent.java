@@ -39,7 +39,7 @@ public class OutboxEvent {
     private int eventVersion;
 
     @Field("payload")
-    private Object payload;
+    private org.bson.Document payload;
 
     @Field("correlationId")
     private String correlationId;

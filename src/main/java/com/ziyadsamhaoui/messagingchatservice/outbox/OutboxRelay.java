@@ -3,6 +3,7 @@ package com.ziyadsamhaoui.messagingchatservice.outbox;
 import com.ziyadsamhaoui.messagingchatservice.config.KafkaOutboxProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.bson.Document;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -15,6 +16,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -22,6 +24,15 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 @RequiredArgsConstructor
 public class OutboxRelay {
+
+    /**
+     * Node class prefix used by Jackson 3 ({@code tools.jackson}) and Jackson 2
+     * ({@code com.fasterxml.jackson}) tree nodes. Payloads written by the previous
+     * implementation were persisted as a serialized tree node, so records already
+     * sitting in the outbox still carry this shape and are unwrapped on read.
+     */
+    private static final String JACKSON_3_NODE_PREFIX = "tools.jackson.databind.node.";
+    private static final String JACKSON_2_NODE_PREFIX = "com.fasterxml.jackson.databind.node.";
 
     private final MongoTemplate mongoTemplate;
     private final KafkaTemplate<String, String> kafkaTemplate;
@@ -80,6 +91,58 @@ public class OutboxRelay {
                 EventEnvelope.PRODUCER,
                 event.getCorrelationId(),
                 event.getAggregateId(),
-                event.getPayload());
+                normalizePayload(event.getPayload()));
+    }
+
+    /**
+     * Returns the payload as a plain BSON document, unwrapping the legacy tree-node
+     * representation when a record was written by the previous implementation. New
+     * records are already stored as documents and pass through unchanged.
+     */
+    static Document normalizePayload(Document payload) {
+        if (payload == null) {
+            return null;
+        }
+        Object normalized = unwrapNode(payload);
+        return normalized instanceof Document document ? document : new Document("value", normalized);
+    }
+
+    private static Object unwrapNode(Object value) {
+        if (value instanceof Document document) {
+            return unwrapDocumentNode(document);
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(OutboxRelay::unwrapNode).toList();
+        }
+        return value;
+    }
+
+    private static Object unwrapDocumentNode(Document node) {
+        String nodeClass = node.getString("_class");
+        if (nodeClass == null
+                || !(nodeClass.startsWith(JACKSON_3_NODE_PREFIX) || nodeClass.startsWith(JACKSON_2_NODE_PREFIX))) {
+            return node;
+        }
+        if (nodeClass.endsWith("NullNode") || nodeClass.endsWith("MissingNode")) {
+            return null;
+        }
+        if (nodeClass.endsWith("ArrayNode")) {
+            Object children = node.get("_children");
+            return children instanceof List<?> list
+                    ? list.stream().map(OutboxRelay::unwrapNode).toList()
+                    : List.of();
+        }
+        if (nodeClass.endsWith("ObjectNode")) {
+            Object children = node.get("_children");
+            if (children instanceof Document childDocument) {
+                Document result = new Document();
+                for (Map.Entry<String, Object> entry : childDocument.entrySet()) {
+                    result.put(entry.getKey(), unwrapNode(entry.getValue()));
+                }
+                return result;
+            }
+            return new Document();
+        }
+        return node.containsKey("_value") ? unwrapNode(node.get("_value")) : node;
     }
 }

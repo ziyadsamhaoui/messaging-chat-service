@@ -2,6 +2,7 @@ package com.ziyadsamhaoui.messagingchatservice.outbox;
 
 import com.ziyadsamhaoui.messagingchatservice.web.CorrelationContext;
 import lombok.RequiredArgsConstructor;
+import org.bson.Document;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -26,10 +27,20 @@ public class OutboxWriter {
                 .aggregateId(aggregateId)
                 .eventType(eventType)
                 .eventVersion(EventEnvelope.VERSION_1)
-                .payload(objectMapper.valueToTree(payload))
+                .payload(toPayloadDocument(payload))
                 .correlationId(CorrelationContext.current())
                 .createdAt(Instant.now())
                 .build();
         mongoTemplate.save(event);
+    }
+
+    /**
+     * The payload is persisted as a native BSON document so the event JSON keeps
+     * its nested objects, arrays, numbers, booleans, strings and nulls. Storing a
+     * Jackson tree node instead makes Spring Data persist the node's internal
+     * shape and fail to instantiate it again on read.
+     */
+    private Document toPayloadDocument(Object payload) {
+        return Document.parse(objectMapper.writeValueAsString(payload));
     }
 }

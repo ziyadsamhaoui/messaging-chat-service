@@ -120,6 +120,7 @@ public class MessageService {
         return CursorPage.of(items, nextCursor, hasMore);
     }
 
+    @Transactional
     public MessageResponse editMessage(String callerId, String roomId, String messageId, EditMessageRequest request) {
         roomAccessService.requireParticipant(roomId, callerId);
         Message message = requireMessage(roomId, messageId);

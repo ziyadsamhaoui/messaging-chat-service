@@ -2,6 +2,7 @@ package com.ziyadsamhaoui.messagingchatservice.kafka;
 
 import com.ziyadsamhaoui.messagingchatservice.cache.BlockCacheService;
 import com.ziyadsamhaoui.messagingchatservice.cache.UserCacheService;
+import com.ziyadsamhaoui.messagingchatservice.service.DirectRoomProvisioner;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -25,6 +26,7 @@ public class UserProfileEventsConsumer {
 
     private final UserCacheService userCacheService;
     private final BlockCacheService blockCacheService;
+    private final DirectRoomProvisioner directRoomProvisioner;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = TOPIC, groupId = GROUP_ID)
@@ -47,6 +49,9 @@ public class UserProfileEventsConsumer {
                 case "USER_UNBLOCKED" -> blockCacheService.recordUnblocked(
                         payload.get("blockerId").asString(),
                         payload.get("blockedId").asString());
+                case "USER_CONNECTION_ACCEPTED" -> directRoomProvisioner.ensureDirectRoom(
+                        payload.get("userIdA").asString(),
+                        payload.get("userIdB").asString());
                 default -> log.debug("ignoring event type {} on {}",
                         envelope.get("eventType").asString(), TOPIC);
             }

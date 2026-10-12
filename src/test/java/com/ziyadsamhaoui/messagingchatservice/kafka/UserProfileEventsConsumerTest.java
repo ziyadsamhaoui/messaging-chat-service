@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 
 import com.ziyadsamhaoui.messagingchatservice.cache.BlockCacheService;
 import com.ziyadsamhaoui.messagingchatservice.cache.UserCacheService;
+import com.ziyadsamhaoui.messagingchatservice.service.DirectRoomProvisioner;
 import java.time.Instant;
 import java.util.UUID;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -29,13 +30,15 @@ class UserProfileEventsConsumerTest {
 
     private UserCacheService userCacheService;
     private BlockCacheService blockCacheService;
+    private DirectRoomProvisioner directRoomProvisioner;
     private UserProfileEventsConsumer consumer;
 
     @BeforeEach
     void setUp() {
         userCacheService = mock(UserCacheService.class);
         blockCacheService = mock(BlockCacheService.class);
-        consumer = new UserProfileEventsConsumer(userCacheService, blockCacheService, MAPPER);
+        directRoomProvisioner = mock(DirectRoomProvisioner.class);
+        consumer = new UserProfileEventsConsumer(userCacheService, blockCacheService, directRoomProvisioner, MAPPER);
     }
 
     @Test
@@ -88,6 +91,31 @@ class UserProfileEventsConsumerTest {
     }
 
     @Test
+    void connectionAcceptedProvisionsADirectRoomForBothParticipants() {
+        String json = envelope("USER_CONNECTION_ACCEPTED", """
+                {"userIdA":"user-1","userIdB":"user-2","userAUsername":"zara","userBUsername":"omar",
+                "acceptedAt":"2026-01-01T10:00:00Z"}
+                """);
+
+        consumer.onMessage(record(json));
+
+        verify(directRoomProvisioner).ensureDirectRoom("user-1", "user-2");
+    }
+
+    @Test
+    void redeliveredConnectionAcceptedProvisionsAgainUsingTheIdempotentOperation() {
+        String json = envelope("USER_CONNECTION_ACCEPTED", """
+                {"userIdA":"user-1","userIdB":"user-2","userAUsername":"zara","userBUsername":"omar",
+                "acceptedAt":"2026-01-01T10:00:00Z"}
+                """);
+
+        consumer.onMessage(record(json));
+        consumer.onMessage(record(json));
+
+        verify(directRoomProvisioner, times(2)).ensureDirectRoom("user-1", "user-2");
+    }
+
+    @Test
     void unrelatedEventTypesAreIgnored() {
         consumer.onMessage(record(envelope("USER_ROLE_CHANGED", """
                 {"userId":"user-1","role":"ADMIN","changedAt":"2026-01-01T10:00:00Z"}
@@ -95,6 +123,7 @@ class UserProfileEventsConsumerTest {
 
         verify(userCacheService, never()).upsert(anyString(), anyString(), any());
         verify(blockCacheService, never()).recordBlocked(anyString(), anyString());
+        verify(directRoomProvisioner, never()).ensureDirectRoom(anyString(), anyString());
     }
 
     @Test
