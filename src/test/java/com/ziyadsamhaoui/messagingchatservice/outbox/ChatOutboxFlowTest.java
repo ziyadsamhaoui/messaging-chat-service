@@ -34,6 +34,7 @@ import com.ziyadsamhaoui.messagingchatservice.service.support.SenderIdentityReso
 import com.ziyadsamhaoui.messagingchatservice.config.ChatProperties;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -148,6 +149,21 @@ class ChatOutboxFlowTest {
 
         assertThatThrownBy(() -> messageService.editMessage(CALLER, room.getId(), ChatTestFixtures.MESSAGE_ID,
                 new EditMessageRequest("edited body"))).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void appendAttachmentsAppendsMessageAttachmentsUpdated() {
+        Message message = ChatTestFixtures.textMessage(CALLER);
+        when(messageRepository.findById(ChatTestFixtures.MESSAGE_ID)).thenReturn(Optional.of(message));
+        org.mockito.ArgumentCaptor<ChatEvents.MessageAttachmentsUpdated> payload =
+                org.mockito.ArgumentCaptor.forClass(ChatEvents.MessageAttachmentsUpdated.class);
+
+        messageService.appendAttachments(ChatTestFixtures.MESSAGE_ID, List.of("attachment-1"));
+
+        verify(outboxWriter).append(eq("Message"), eq(ChatTestFixtures.MESSAGE_ID),
+                eq(ChatEvents.MESSAGE_ATTACHMENTS_UPDATED), payload.capture());
+        assertThat(payload.getValue().attachmentIds()).containsExactly("attachment-1");
+        assertThat(payload.getValue().roomId()).isEqualTo(message.getRoomId());
     }
 
     @Test

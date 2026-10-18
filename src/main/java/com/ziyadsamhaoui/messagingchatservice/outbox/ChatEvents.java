@@ -16,6 +16,7 @@ public final class ChatEvents {
     public static final String MESSAGE_SENT = "MESSAGE_SENT";
     public static final String MESSAGE_EDITED = "MESSAGE_EDITED";
     public static final String MESSAGE_DELETED = "MESSAGE_DELETED";
+    public static final String MESSAGE_ATTACHMENTS_UPDATED = "MESSAGE_ATTACHMENTS_UPDATED";
     public static final String REACTION_ADDED = "REACTION_ADDED";
     public static final String REACTION_REMOVED = "REACTION_REMOVED";
     public static final String ROOM_CREATED = "ROOM_CREATED";
@@ -35,6 +36,10 @@ public final class ChatEvents {
     }
 
     public record MessageDeleted(String messageId, String roomId, Instant deletedAt) {
+    }
+
+    public record MessageAttachmentsUpdated(String messageId, String roomId, List<String> attachmentIds,
+            Instant updatedAt) {
     }
 
     public record ReactionAdded(String messageId, String roomId, String userId, String reactorUsername, String emoji,
