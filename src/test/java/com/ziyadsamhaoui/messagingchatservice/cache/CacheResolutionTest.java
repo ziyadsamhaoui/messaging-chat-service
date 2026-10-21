@@ -17,17 +17,6 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/**
- * Sprint 6 §2.3 / §3.5 (no Docker): the two cache-first behaviours that replaced
- * Chat's synchronous calls to User.
- *
- * <ul>
- *   <li><b>Username</b> — cache first, JWT-claim fallback for cold start; the
- *       synchronous profile call is gone entirely (cosmetic data).</li>
- *   <li><b>Blocks</b> — cache first, then the synchronous call as a fail-closed
- *       cache-miss fallback; a miss is "unknown", never "not blocked" (policy data).</li>
- * </ul>
- */
 class CacheResolutionTest {
 
     private UserCacheService userCacheService;

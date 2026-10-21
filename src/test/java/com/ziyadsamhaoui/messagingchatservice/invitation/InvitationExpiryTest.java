@@ -170,7 +170,6 @@ class InvitationExpiryTest extends ChatIntegrationTest {
     void rejectsInvitationsForDirectRooms() throws Exception {
         ChatRoom directRoom = ChatTestFixtures.directRoom("user-1", "direct-key");
 
-        // Direct rooms hold no owner role, so the caller is promoted only to reach the room type guard.
         givenRoomWithParticipants(directRoom, ChatTestFixtures.participant("user-1", ParticipantRole.OWNER));
 
         mockMvc.perform(post("/rooms/{roomId}/invitations", directRoom.getId())

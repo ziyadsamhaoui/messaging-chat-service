@@ -62,11 +62,6 @@ public abstract class ChatIntegrationTest {
     @MockitoBean
     protected UserServiceClient userServiceClient;
 
-    /**
-     * Sprint 6: the outbox write and both caches are mocked so the suites stay
-     * database-free (ADR-016) — the real Mongo behaviour is covered by the
-     * relay/cache unit tests and against a replica set in integration environments.
-     */
     @MockitoBean
     protected OutboxWriter outboxWriter;
 
@@ -89,19 +84,10 @@ public abstract class ChatIntegrationTest {
         }
     }
 
-    /**
-     * Sprint 6: username resolution now reads the local cache fed by profile events;
-     * the synchronous profile call is no longer on the message-send path.
-     */
     protected void givenUsername(String userId, String username) {
         when(userCacheService.lookup(userId)).thenReturn(Optional.of(username));
     }
 
-    /**
-     * MongoDB transactions require a replica set, which is not available in the test environment, so the transactional
-     * boundary is replaced with a resource-less manager. Transactional composition itself is exercised against a
-     * replica set in integration environments.
-     */
     @TestConfiguration
     public static class NoOpTransactionConfiguration {
 

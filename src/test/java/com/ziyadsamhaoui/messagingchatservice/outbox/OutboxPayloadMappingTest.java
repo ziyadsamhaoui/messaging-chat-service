@@ -25,12 +25,6 @@ import org.springframework.data.mongodb.core.convert.MongoCustomConversions;
 import org.springframework.data.mongodb.core.mapping.MongoMappingContext;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * The outbox payload must round-trip through Spring Data's MongoDB converter:
- * {@link OutboxWriter} persists a BSON document and {@link OutboxRelay} reads it
- * back. This is exercised against a real {@link MappingMongoConverter} without a
- * running database, following {@code ChatDocumentMappingTest}.
- */
 class OutboxPayloadMappingTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();

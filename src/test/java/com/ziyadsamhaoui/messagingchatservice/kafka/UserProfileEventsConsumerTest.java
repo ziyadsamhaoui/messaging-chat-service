@@ -18,12 +18,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * Sprint 6 §2.3/§3.4 (no Docker): the consumer dispatches each User event type to
- * the right cache, ignores topics/events it does not own, survives malformed
- * payloads (poison-pill protection), and applies redelivery through naturally
- * idempotent operations — the second delivery is safe to run.
- */
 class UserProfileEventsConsumerTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -85,8 +79,6 @@ class UserProfileEventsConsumerTest {
         consumer.onMessage(record(json));
         consumer.onMessage(record(json));
 
-        // Upsert-by-userId is naturally idempotent (§3.4, option 1) — replay is a no-op
-        // in effect. The cached value after the second delivery is the same as after the first.
         verify(userCacheService, times(2)).upsert("user-1", "zara", Instant.parse("2026-01-01T10:00:00Z"));
     }
 

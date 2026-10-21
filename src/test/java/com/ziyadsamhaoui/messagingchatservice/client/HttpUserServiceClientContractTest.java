@@ -23,14 +23,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.client.RestClient;
 
-/**
- * Contract test for the Chat → User internal API (INC-01).
- *
- * <p>Chat's suites mock {@link UserServiceClient}, so a path or header drift stayed
- * invisible until a live direct-room creation failed. This test boots a real HTTP
- * endpoint and exercises the real {@link HttpUserServiceClient}, pinning the exact
- * request (path + {@code X-Internal-Token}) and the {@code 404}/{@code 5xx} mapping.
- */
 class HttpUserServiceClientContractTest {
 
     private static final String INTERNAL_TOKEN = "test-internal-token";
@@ -75,7 +67,6 @@ class HttpUserServiceClientContractTest {
 
         assertThat(profile.id()).isEqualTo(PROFILE_ID);
         assertThat(profile.username()).isEqualTo("omar");
-        // The exact path Chat is contracted to call (docs/API_ENDPOINTS.md, Chat → User).
         assertThat(requestedPaths).containsExactly("/internal/users/" + PROFILE_ID);
         assertThat(internalTokenHeader.get()).isEqualTo(INTERNAL_TOKEN);
     }
@@ -92,9 +83,6 @@ class HttpUserServiceClientContractTest {
 
     @Test
     void getProfileIsUnavailableWhenTheInternalRouteIsNotServed() {
-        // The historical failure: the User service had no GET /internal/users/{id}, so the
-        // request fell through to the static-resource handler and answered 500. Chat must
-        // report a dependency failure — never a missing profile and never a success.
         forcedStatus.set(HttpStatus.INTERNAL_SERVER_ERROR.value());
 
         assertThatThrownBy(() -> client().getProfile(PROFILE_ID))

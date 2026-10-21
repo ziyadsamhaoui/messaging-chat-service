@@ -27,11 +27,6 @@ import org.springframework.kafka.support.SendResult;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * Sprint 6 §3.3/§3.5 (no Docker): the relay routes each aggregate to its topic,
- * stamps {@code publishedAt} only after the Kafka ack, and leaves the row
- * unpublished when the send fails so the next tick retries it (at-least-once).
- */
 class OutboxRelayTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();

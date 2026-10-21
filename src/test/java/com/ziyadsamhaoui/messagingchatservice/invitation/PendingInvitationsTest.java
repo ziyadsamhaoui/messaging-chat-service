@@ -22,12 +22,6 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-/**
- * INC-22 follow-up: the invitation inbox is server-truth. The sender sees their
- * outgoing invitation and the recipient sees the same invitation as incoming, both
- * sourced from one query that only returns {@code PENDING} rows so a completed
- * invitation disappears for both users without any client-side bookkeeping.
- */
 class PendingInvitationsTest extends ChatIntegrationTest {
 
     private static final String SENDER = "user-1";
@@ -74,8 +68,6 @@ class PendingInvitationsTest extends ChatIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
 
-        // Completed (ACCEPTED/REJECTED) invitations can never reach the inbox because
-        // both lookups are filtered on PENDING.
         verify(invitationRepository).findByInvitedIdAndStatus(SENDER, InvitationStatus.PENDING);
         verify(invitationRepository).findByInviterIdAndStatus(SENDER, InvitationStatus.PENDING);
     }
@@ -134,7 +126,6 @@ class PendingInvitationsTest extends ChatIntegrationTest {
                 Instant.now().plus(Duration.ofHours(2)));
         when(invitationRepository.findById(ChatTestFixtures.INVITATION_ID)).thenReturn(Optional.of(invitation));
         when(chatRoomRepository.findById(ChatTestFixtures.ROOM_ID)).thenReturn(Optional.of(room));
-        // Another request already flipped PENDING -> ACCEPTED, so this one must not insert a participant.
         when(invitationRepository.updateStatus(ChatTestFixtures.INVITATION_ID, InvitationStatus.PENDING,
                 InvitationStatus.ACCEPTED)).thenReturn(false);
 

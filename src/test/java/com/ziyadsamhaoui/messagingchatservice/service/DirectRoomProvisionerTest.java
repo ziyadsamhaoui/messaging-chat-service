@@ -19,11 +19,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DuplicateKeyException;
 
-/**
- * A connection becoming established must produce exactly one direct room: repeated
- * deliveries and concurrent creations must converge, and an existing room must be
- * reused rather than duplicated.
- */
 class DirectRoomProvisionerTest {
 
     private static final String USER_A = "user-1";

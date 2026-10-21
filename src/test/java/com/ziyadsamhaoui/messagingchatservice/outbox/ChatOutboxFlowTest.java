@@ -40,11 +40,6 @@ import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/**
- * Sprint 6 §3.5 (no Docker): every Chat domain write that should produce an event
- * appends exactly one outbox document with the right aggregate, event type, and
- * payload — and writes with no domain effect append none.
- */
 class ChatOutboxFlowTest {
 
     private static final String CALLER = "user-1";
@@ -232,7 +227,6 @@ class ChatOutboxFlowTest {
         try {
             messageService.sendMessage(CALLER, room.getId(), new SendMessageRequest(MessageType.TEXT, "hi"));
         } catch (RuntimeException expected) {
-            // muted participant is rejected before any write
         }
 
         verify(outboxWriter, never()).append(anyString(), anyString(), anyString(), any());

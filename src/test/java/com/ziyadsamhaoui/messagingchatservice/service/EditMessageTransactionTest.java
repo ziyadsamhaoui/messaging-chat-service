@@ -40,18 +40,6 @@ import org.springframework.transaction.support.AbstractPlatformTransactionManage
 import org.springframework.transaction.support.DefaultTransactionStatus;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * Reproduces the reported failure: {@code MessageService.editMessage} must open a
- * transaction so that {@link OutboxWriter#append} — declared with
- * {@code Propagation.MANDATORY} — joins that transaction instead of throwing
- * {@link IllegalTransactionStateException}.
- *
- * <p>The real Spring proxy and the real {@link OutboxWriter} bean are used. The MongoDB
- * transaction manager needs a replica set that is unavailable here, so the transaction
- * boundary is a resource-less manager that tracks per-thread nesting and participates the
- * same way {@code MongoTransactionManager} does. A missing {@code @Transactional} on
- * {@code editMessage} still makes the MANDATORY write fail, exactly as in production.
- */
 @SpringJUnitConfig(EditMessageTransactionTest.TransactionTestConfiguration.class)
 class EditMessageTransactionTest {
 
