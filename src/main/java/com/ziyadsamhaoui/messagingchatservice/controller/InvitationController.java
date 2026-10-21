@@ -34,12 +34,6 @@ public class InvitationController {
         return invitationService.invite(currentUserProvider.requireUserId(), roomId, request);
     }
 
-    /**
-     * The caller's pending invitations in both directions. This is the server-truth
-     * source for the invitation inbox: completed invitations are excluded because the
-     * query filters on {@code PENDING}, so neither the sender nor the recipient sees a
-     * handled invitation after a refresh (INC-22).
-     */
     @GetMapping("/invitations/pending")
     public List<PendingInvitationResponse> listPending() {
         return invitationService.listPending(currentUserProvider.requireUserId());

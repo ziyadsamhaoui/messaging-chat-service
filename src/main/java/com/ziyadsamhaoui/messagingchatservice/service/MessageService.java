@@ -200,9 +200,6 @@ public class MessageService {
         newAttachmentIds.stream().filter(attachmentId -> !merged.contains(attachmentId)).forEach(merged::add);
         message.setAttachmentIds(merged);
 
-        // The attachment becomes ready long after the message was sent, so there is no
-        // SEND frame to relay. The event lets the realtime gateway push the updated
-        // message to the room's subscribers through the existing fan-out path.
         outboxWriter.append("Message", messageId, ChatEvents.MESSAGE_ATTACHMENTS_UPDATED,
                 new ChatEvents.MessageAttachmentsUpdated(messageId, message.getRoomId(), merged, Instant.now()));
 

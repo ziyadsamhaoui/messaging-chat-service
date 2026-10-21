@@ -98,7 +98,6 @@ public class InvitationService {
         invitation.setExpiresAt(now.plus(resolveTtl(request.ttl())));
 
         Invitation saved = invitationRepository.insert(invitation);
-        // Sprint 6 §2.3: same transaction as the invitation insert.
         outboxWriter.append("Invitation", saved.getId(), ChatEvents.INVITATION_SENT,
                 new ChatEvents.InvitationSent(saved.getId(), roomId, invitedId, callerId,
                         context.room().getName(), senderIdentityResolver.resolveUsername(callerId), now));
@@ -106,12 +105,6 @@ public class InvitationService {
         return InvitationResponse.from(saved);
     }
 
-    /**
-     * The caller's pending-invitation inbox: every {@code PENDING} invitation they
-     * sent (OUTGOING) or received (INCOMING), newest first. Answering an invitation
-     * flips its status, so completed invitations drop out of this list on the next
-     * read — there is no separate bookkeeping to keep in sync.
-     */
     @Transactional(readOnly = true)
     public List<PendingInvitationResponse> listPending(String callerId) {
         Stream<PendingInvitationResponse> incoming = invitationRepository
@@ -143,7 +136,6 @@ public class InvitationService {
         if (!participantRepository.existsByRoomIdAndUserId(room.getId(), callerId)) {
             participantRepository
                     .insert(Participant.member(room.getId(), callerId, ParticipantRole.GUEST, Instant.now()));
-            // Sprint 6 §2.3: participant arrival via invitation is a PARTICIPANT_ADDED too.
             outboxWriter.append("Participant", callerId, ChatEvents.PARTICIPANT_ADDED,
                     new ChatEvents.ParticipantAdded(room.getId(), callerId, ParticipantRole.GUEST.name()));
         }

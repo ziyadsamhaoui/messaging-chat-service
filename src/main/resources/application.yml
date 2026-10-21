@@ -43,7 +43,6 @@ badrlink:
     ensure-indexes: true
     internal-service-token: ${CHAT_INTERNAL_SERVICE_TOKEN}
   user-service:
-    # Contract below must match messaging-user-service's actual endpoints
     base-url: ${USER_SERVICE_BASE_URL:http://localhost:8082}
     profile-path: /internal/users/{userId}
     block-status-path: /internal/blocks/check

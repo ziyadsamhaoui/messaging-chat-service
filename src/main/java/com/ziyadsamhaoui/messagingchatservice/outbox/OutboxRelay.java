@@ -25,12 +25,6 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class OutboxRelay {
 
-    /**
-     * Node class prefix used by Jackson 3 ({@code tools.jackson}) and Jackson 2
-     * ({@code com.fasterxml.jackson}) tree nodes. Payloads written by the previous
-     * implementation were persisted as a serialized tree node, so records already
-     * sitting in the outbox still carry this shape and are unwrapped on read.
-     */
     private static final String JACKSON_3_NODE_PREFIX = "tools.jackson.databind.node.";
     private static final String JACKSON_2_NODE_PREFIX = "com.fasterxml.jackson.databind.node.";
 
@@ -94,11 +88,6 @@ public class OutboxRelay {
                 normalizePayload(event.getPayload()));
     }
 
-    /**
-     * Returns the payload as a plain BSON document, unwrapping the legacy tree-node
-     * representation when a record was written by the previous implementation. New
-     * records are already stored as documents and pass through unchanged.
-     */
     static Document normalizePayload(Document payload) {
         if (payload == null) {
             return null;

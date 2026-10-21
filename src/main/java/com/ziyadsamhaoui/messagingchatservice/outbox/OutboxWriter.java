@@ -34,12 +34,6 @@ public class OutboxWriter {
         mongoTemplate.save(event);
     }
 
-    /**
-     * The payload is persisted as a native BSON document so the event JSON keeps
-     * its nested objects, arrays, numbers, booleans, strings and nulls. Storing a
-     * Jackson tree node instead makes Spring Data persist the node's internal
-     * shape and fail to instantiate it again on read.
-     */
     private Document toPayloadDocument(Object payload) {
         return Document.parse(objectMapper.writeValueAsString(payload));
     }
