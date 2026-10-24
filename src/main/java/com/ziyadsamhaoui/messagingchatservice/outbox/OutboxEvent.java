@@ -44,6 +44,14 @@ public class OutboxEvent {
     @Field("correlationId")
     private String correlationId;
 
+    /**
+     * W3C {@code traceparent} of the span that wrote this document, replayed by the relay so
+     * the Kafka record continues the originating trace. Documents written before this field
+     * existed simply have no value and are published without a trace header.
+     */
+    @Field("traceParent")
+    private String traceParent;
+
     @Field("createdAt")
     private Instant createdAt;
 

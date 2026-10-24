@@ -1,8 +1,12 @@
 package com.ziyadsamhaoui.messagingchatservice.outbox;
 
 import com.ziyadsamhaoui.messagingchatservice.config.KafkaOutboxProperties;
+import com.ziyadsamhaoui.messagingchatservice.observability.TraceContextCarrier;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.bson.Document;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -14,6 +18,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -53,8 +58,30 @@ public class OutboxRelay {
     private void send(OutboxEvent event) {
         try {
             String topic = topicFor(event.getAggregateType());
-            String envelopeJson = objectMapper.writeValueAsString(toEnvelope(event));
-            kafkaTemplate.send(topic, event.getAggregateId(), envelopeJson).get(10, TimeUnit.SECONDS);
+            ProducerRecord<String, String> record = new ProducerRecord<>(topic, event.getAggregateId(),
+                    objectMapper.writeValueAsString(toEnvelope(event)));
+
+            // The stored traceparent is written explicitly so the header is present even when
+            // the agent is not attached (tests, or a build without instrumentation).
+            if (event.getTraceParent() != null) {
+                record.headers().add(TraceContextCarrier.TRACEPARENT,
+                        event.getTraceParent().getBytes(StandardCharsets.UTF_8));
+            }
+
+            Context originating = TraceContextCarrier.extract(event.getTraceParent());
+            if (originating == null) {
+                // No context to restore (scheduled origin, or a document written before this
+                // feature): publish as-is rather than inventing a header that matches no trace.
+                kafkaTemplate.send(record).get(10, TimeUnit.SECONDS);
+            } else {
+                // Re-activating the originating context makes the agent's producer span a child
+                // of the span that wrote the outbox document, so its own traceparent injection
+                // keeps the trace instead of starting a new one.
+                try (Scope scope = originating.makeCurrent()) {
+                    kafkaTemplate.send(record).get(10, TimeUnit.SECONDS);
+                }
+            }
+
             Query mark = Query.query(Criteria.where("_id").is(event.getEventId()));
             mongoTemplate.updateFirst(mark, Update.update("publishedAt", Instant.now()), OutboxEvent.COLLECTION);
         } catch (InterruptedException ex) {

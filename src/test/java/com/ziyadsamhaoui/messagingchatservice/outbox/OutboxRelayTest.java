@@ -1,7 +1,6 @@
 package com.ziyadsamhaoui.messagingchatservice.outbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -15,6 +14,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,19 +51,16 @@ class OutboxRelayTest {
                 new ChatEvents.MessageSent("msg-1", "room-1", "user-1", "zara", "TEXT", "hello", Instant.now()));
         when(mongoTemplate.find(any(Query.class), eq(OutboxEvent.class), eq(OutboxEvent.COLLECTION)))
                 .thenReturn(List.of(event));
-        when(kafkaTemplate.send(anyString(), anyString(), anyString()))
+        when(kafkaTemplate.send(any(ProducerRecord.class)))
                 .thenReturn(CompletableFuture.completedFuture(mock(SendResult.class)));
 
         relay.publishPending();
 
-        ArgumentCaptor<String> topic = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<String> key = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
-        verify(kafkaTemplate).send(topic.capture(), key.capture(), body.capture());
-        assertThat(topic.getValue()).isEqualTo(ChatEvents.TOPIC_MESSAGE);
-        assertThat(key.getValue()).isEqualTo("msg-1");
+        ProducerRecord<String, String> record = capturedRecord();
+        assertThat(record.topic()).isEqualTo(ChatEvents.TOPIC_MESSAGE);
+        assertThat(record.key()).isEqualTo("msg-1");
 
-        JsonNode envelope = MAPPER.readTree(body.getValue());
+        JsonNode envelope = MAPPER.readTree(record.value());
         assertThat(envelope.get("eventType").asString()).isEqualTo(ChatEvents.MESSAGE_SENT);
         assertThat(envelope.get("producer").asString()).isEqualTo("messaging-chat-service");
         assertThat(envelope.get("aggregateId").asString()).isEqualTo("msg-1");
@@ -89,7 +86,7 @@ class OutboxRelayTest {
                 .thenReturn(List.of(event));
         CompletableFuture<SendResult<String, String>> failed = new CompletableFuture<>();
         failed.completeExceptionally(new RuntimeException("broker down"));
-        when(kafkaTemplate.send(anyString(), anyString(), anyString())).thenReturn(failed);
+        when(kafkaTemplate.send(any(ProducerRecord.class))).thenReturn(failed);
 
         relay.publishPending();
 
@@ -103,7 +100,7 @@ class OutboxRelayTest {
 
         relay.publishPending();
 
-        verify(kafkaTemplate, never()).send(anyString(), anyString(), anyString());
+        verify(kafkaTemplate, never()).send(any(ProducerRecord.class));
     }
 
     @Test
@@ -124,14 +121,15 @@ class OutboxRelayTest {
                 .build();
         when(mongoTemplate.find(any(Query.class), eq(OutboxEvent.class), eq(OutboxEvent.COLLECTION)))
                 .thenReturn(List.of(event));
-        when(kafkaTemplate.send(anyString(), anyString(), anyString()))
+        when(kafkaTemplate.send(any(ProducerRecord.class)))
                 .thenReturn(CompletableFuture.completedFuture(mock(SendResult.class)));
 
         relay.publishPending();
 
-        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
-        verify(kafkaTemplate).send(eq(ChatEvents.TOPIC_MESSAGE), eq("msg-1"), body.capture());
-        JsonNode envelope = MAPPER.readTree(body.getValue());
+        ProducerRecord<String, String> record = capturedRecord();
+        assertThat(record.topic()).isEqualTo(ChatEvents.TOPIC_MESSAGE);
+        assertThat(record.key()).isEqualTo("msg-1");
+        JsonNode envelope = MAPPER.readTree(record.value());
         assertThat(envelope.get("payload").get("content").asString()).isEqualTo("hello");
         assertThat(envelope.get("payload").get("count").asInt()).isEqualTo(42);
         assertThat(envelope.get("payload").has("_children")).isFalse();
@@ -146,14 +144,47 @@ class OutboxRelayTest {
 
         relay.publishPending();
 
-        verify(kafkaTemplate, never()).send(anyString(), anyString(), anyString());
+        verify(kafkaTemplate, never()).send(any(ProducerRecord.class));
         verify(mongoTemplate, never()).updateFirst(any(Query.class), any(Update.class), anyString());
+    }
+
+    @Test
+    void storedTraceParentIsInjectedIntoTheKafkaRecord() {
+        String traceParent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        OutboxEvent event = eventFor("Message", ChatEvents.MESSAGE_SENT,
+                new ChatEvents.MessageSent("msg-1", "room-1", "user-1", "zara", "TEXT", "hello", Instant.now()));
+        event.setTraceParent(traceParent);
+        when(mongoTemplate.find(any(Query.class), eq(OutboxEvent.class), eq(OutboxEvent.COLLECTION)))
+                .thenReturn(List.of(event));
+        when(kafkaTemplate.send(any(ProducerRecord.class)))
+                .thenReturn(CompletableFuture.completedFuture(mock(SendResult.class)));
+
+        relay.publishPending();
+
+        ProducerRecord<String, String> record = capturedRecord();
+        assertThat(record.headers().lastHeader("traceparent")).isNotNull();
+        assertThat(new String(record.headers().lastHeader("traceparent").value())).isEqualTo(traceParent);
+        verify(mongoTemplate).updateFirst(any(Query.class), any(Update.class), eq(OutboxEvent.COLLECTION));
+    }
+
+    @Test
+    void documentsWithoutTraceContextPublishNoTraceparentHeader() {
+        OutboxEvent event = eventFor("Message", ChatEvents.MESSAGE_SENT,
+                new ChatEvents.MessageSent("msg-1", "room-1", "user-1", "zara", "TEXT", "hello", Instant.now()));
+        when(mongoTemplate.find(any(Query.class), eq(OutboxEvent.class), eq(OutboxEvent.COLLECTION)))
+                .thenReturn(List.of(event));
+        when(kafkaTemplate.send(any(ProducerRecord.class)))
+                .thenReturn(CompletableFuture.completedFuture(mock(SendResult.class)));
+
+        relay.publishPending();
+
+        assertThat(capturedRecord().headers().lastHeader("traceparent")).isNull();
     }
 
     private String topicUsedFor(String aggregateType) {
         @SuppressWarnings("unchecked")
         KafkaTemplate<String, String> template = mock(KafkaTemplate.class);
-        when(template.send(anyString(), anyString(), anyString()))
+        when(template.send(any(ProducerRecord.class)))
                 .thenReturn(CompletableFuture.completedFuture(mock(SendResult.class)));
         when(mongoTemplate.find(any(Query.class), eq(OutboxEvent.class), eq(OutboxEvent.COLLECTION)))
                 .thenReturn(List.of(eventFor(aggregateType, "SOMETHING_HAPPENED", new Object())));
@@ -161,9 +192,21 @@ class OutboxRelayTest {
 
         localRelay.publishPending();
 
-        ArgumentCaptor<String> topic = ArgumentCaptor.forClass(String.class);
-        verify(template).send(topic.capture(), anyString(), anyString());
-        return topic.getValue();
+        return capturedRecord(template).topic();
+    }
+
+    @SuppressWarnings("unchecked")
+    private ProducerRecord<String, String> capturedRecord() {
+        return capturedRecord(kafkaTemplate);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ProducerRecord<String, String> capturedRecord(KafkaTemplate<String, String> template) {
+        ArgumentCaptor<ProducerRecord<String, String>> captor =
+                (ArgumentCaptor<ProducerRecord<String, String>>) (ArgumentCaptor<?>) ArgumentCaptor
+                        .forClass(ProducerRecord.class);
+        verify(template).send(captor.capture());
+        return captor.getValue();
     }
 
     private OutboxEvent eventFor(String aggregateType, String eventType, Object payload) {

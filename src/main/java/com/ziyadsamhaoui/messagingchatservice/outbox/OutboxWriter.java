@@ -1,5 +1,6 @@
 package com.ziyadsamhaoui.messagingchatservice.outbox;
 
+import com.ziyadsamhaoui.messagingchatservice.observability.TraceContextCarrier;
 import com.ziyadsamhaoui.messagingchatservice.web.CorrelationContext;
 import lombok.RequiredArgsConstructor;
 import org.bson.Document;
@@ -29,6 +30,7 @@ public class OutboxWriter {
                 .eventVersion(EventEnvelope.VERSION_1)
                 .payload(toPayloadDocument(payload))
                 .correlationId(CorrelationContext.current())
+                .traceParent(TraceContextCarrier.currentTraceParent())
                 .createdAt(Instant.now())
                 .build();
         mongoTemplate.save(event);
