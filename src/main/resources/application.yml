@@ -2,8 +2,6 @@ server:
   port: ${CHAT_SERVICE_PORT:8083}
   shutdown: graceful
 
-# Actuator is served on its own port: Prometheus scrapes it over the Docker network,
-# while the application port keeps the existing security configuration untouched.
 management:
   server:
     port: ${MANAGEMENT_PORT:9090}
@@ -16,7 +14,6 @@ management:
       probes:
         enabled: true
       show-details: never
-      # Readiness covers MongoDB, the only store Chat can serve without; liveness stays on readinessState.
       group:
         readiness:
           include: readinessState,mongo
@@ -79,9 +76,6 @@ badrlink:
       refresh-interval: ${KAFKA_LAG_METRICS_INTERVAL:15s}
       group-id: messaging-chat-service
 
-# Structured JSON logs. The OpenTelemetry agent puts trace_id/span_id into the MDC, and
-# Boot's logstash format writes the MDC into the JSON object, so no custom encoder is
-# needed and the trace context also survives Kafka consumer threads.
 logging:
   level:
     com.ziyadsamhaoui.messagingchatservice: INFO

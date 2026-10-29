@@ -15,15 +15,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * Exposes the state of the MongoDB outbox as gauges.
- *
- * <p>The values are refreshed on a schedule instead of being queried from the gauge callback:
- * a gauge is evaluated while Prometheus scrapes, and a database round trip there would fail the
- * whole scrape whenever MongoDB is slow. The trade-off is bounded staleness, one refresh
- * interval. The queries are a count and a single oldest document, both covered by the
- * {@code publishedAt} field the relay already filters on.
- */
 @Component
 @Slf4j
 public class OutboxBacklogMetrics {
@@ -59,8 +50,6 @@ public class OutboxBacklogMetrics {
                     ? 0
                     : Math.max(0, Duration.between(oldest.getCreatedAt(), Instant.now()).getSeconds()));
         } catch (RuntimeException ex) {
-            // Keep the last known values: a database hiccup must not hide the metric or, worse,
-            // fail the whole metrics scrape.
             log.warn("could not refresh outbox backlog metrics: {}", ex.getMessage());
         }
     }
